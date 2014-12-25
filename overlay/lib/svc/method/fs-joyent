@@ -115,9 +115,16 @@ if [ $? -ne 0 ]; then
         mkdir -p /opt/smartdc/agents/smf
         mount -O -F lofs /var/svc/manifest/site /opt/smartdc/agents/smf
 
-        if [[ -n $(/bin/bootparams | grep '^headnode=true') ]]; then
+        if [[ -n $(/bin/bootparams | egrep '^(headnode|smartos)=true') ]]; then
             mkdir /usbkey
             mount_zfs ${SYS_ZPOOL}/usbkey /usbkey
+        fi
+
+        if [[ -n $(/bin/bootparams | grep '^smartos=true') ]]; then
+            [[ -d /usbkey/ssh ]] && mount -F lofs /usbkey/ssh /etc/ssh
+            # We don't mount /usbkey/shadow yet because smartdc-config would
+            # overwrite its contents. We do that in smartdc-config
+            # after things that modify shadow are done.
         fi
 
         swap -a /dev/zvol/dsk/${SYS_ZPOOL}/swap || \

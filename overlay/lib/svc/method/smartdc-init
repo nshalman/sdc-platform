@@ -361,7 +361,8 @@ case "$1" in
 
     # If we're not importing the pools, we shouldn't try to setup as a headnode
     # (since there'll be no zpool)
-    if /bin/bootparams | grep "^noimport=true" > /dev/null 2>&1; then
+    # Vanilla SmartOS also doesn't need this
+    if /bin/bootparams | egrep "^(noimport|smartos)=true" > /dev/null 2>&1; then
         exit $SMF_EXIT_OK
     fi
 

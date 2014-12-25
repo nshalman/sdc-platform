@@ -98,6 +98,12 @@ case "$1" in
         echo "No root shadow entry in the config, cannot set."
     fi
 
+    # If we're a SmartOS machine, mount the /usbkey/shadow file if it exists
+    if /bin/bootparams | grep "^smartos=true" > /dev/null 2>&1; then
+        [[ -f /usbkey/shadow ]] && mount -F lofs /usbkey/shadow /etc/shadow && \
+        echo "Mounted SmartOS shadow file"
+    fi
+
     # Set authorized_keys for root
     if [[ -n "${CONFIG_root_authorized_keys_file}" ]] \
         && [[ -n "${CONFIG_config_inc_dir}" ]] \
