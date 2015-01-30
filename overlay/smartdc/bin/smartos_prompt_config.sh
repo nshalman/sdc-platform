@@ -24,6 +24,11 @@ export PS4='[\D{%FT%TZ}] $(tty): ${BASH_SOURCE}:${LINENO}: ${FUNCNAME[0]:+${FUNC
 export BASH_XTRACEFD=4
 set -o xtrace
 
+if [[ -z $(/bin/bootparams | grep "^smartos=true") ]]; then
+	echo "This script should only be run on SmartOS"
+	exit 1
+fi
+
 PATH=/usr/sbin:/usr/bin
 export PATH
 
@@ -40,7 +45,7 @@ EUNKNOWN=3
 
 # Defaults
 mail_to="root@localhost"
-ntp_hosts="pool.ntp.org"
+ntp_hosts="0.smartos.pool.ntp.org"
 dns_resolver1="8.8.8.8"
 dns_resolver2="8.8.4.4"
 
@@ -716,13 +721,13 @@ promptpool()
 	while [[ /usr/bin/true ]]; do
 		diskinfo -Hp > /var/tmp/mydisks
 		disklayout -f /var/tmp/mydisks $layout > /var/tmp/disklayout.json
-		printdisklayout /var/tmp/disklayout.json
+		json error < /var/tmp/disklayout.json | grep . && layout="" && continue
+		prmpt_str="$(printdisklayout /var/tmp/disklayout.json)\n\n"
 		[[ -z "$layout" ]] && layout="default"
-		echo ""
-		echo "This is the '${layout}' storage configuration.  To use it, type 'yes'."
-		echo " To see a different configuration, type: 'raidz2', 'mirror', or default. "
-		echo " To specify a manual configuration, type: 'manual'."
-		echo ""
+		prmpt_str+="This is the '${layout}' storage configuration.  To use it, type 'yes'.\n"
+		prmpt_str+=" To see a different configuration, type: 'raidz2', 'mirror', or 'default'.\n"
+		prmpt_str+=" To specify a manual configuration, type: 'manual'.\n\n"
+		print $prmpt_str
 		read val
 		if [[ $val == "raidz2" || $val == "mirror" ]]; then
 			# go around again
@@ -734,15 +739,18 @@ promptpool()
 			return
 		elif [[ $val == "manual" ]]; then
 			# let the user manually create the zpool
+			layout=""
 			DISK_LAYOUT="manual"
 			echo
 			echo "Launching a shell."
-			echo "Please manually create a zpool named zones."
+			echo "Please manually create/import a zpool named zones."
 			echo "If you no longer wish to manually create a zpool,"
 			echo "simply exit the shell."
 			/usr/bin/bash
 			zpool list zones >/dev/null 2>/dev/null
 			[[ $? -eq 0 ]] && return
+		else
+			layout=""
 		fi
 	done
 }
@@ -785,17 +793,15 @@ setup_datasets()
 		cp -p /etc/zones/* /${CONFDS}
 		zfs set mountpoint=legacy ${CONFDS}
 		printf "%4s\n" "done"
-	  fi
+	fi
 
 	if ! echo $datasets | grep ${USBKEYDS} > /dev/null; then
-		if [[ -n $(/bin/bootparams | grep "^smartos=true") ]]; then
-			printf "%-56s" "Creating config dataset... "
-			zfs create -o mountpoint=legacy ${USBKEYDS} || \
-			  fatal "failed to create the config dataset"
-			mkdir /usbkey
-			mount -F zfs ${USBKEYDS} /usbkey
-			printf "%4s\n" "done"
-		fi
+		printf "%-56s" "Creating config dataset... "
+		zfs create -o mountpoint=legacy ${USBKEYDS} || \
+		  fatal "failed to create the config dataset"
+		mkdir /usbkey
+		mount -F zfs ${USBKEYDS} /usbkey
+		printf "%4s\n" "done"
 	fi
 
 	if ! echo $datasets | grep ${COREDS} > /dev/null; then
@@ -859,7 +865,7 @@ create_zpool()
 
 	# If the pool already exists, don't create it again.
 	if /usr/sbin/zpool list -H -o name $pool >/dev/null 2>/dev/null; then
-		printf "%-56s" "Pool '$pool' exists, skipping creation... "
+		printf "%-56s\n" "Pool '$pool' exists, skipping creation... "
 		return 0
 	fi
 
