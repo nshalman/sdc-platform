@@ -61,6 +61,25 @@ case "$1" in
         fi
     fi
 
+    # If we're a SmartOS machine, see if we have to do interactive configuration.
+    if /bin/bootparams | grep "^smartos=true" > /dev/null 2>&1; then
+        USB_PATH=/`svcprop -p "joyentfs/usb_mountpoint" svc:/system/filesystem/smartdc:default`
+
+        # Check for config and run interactive if it doesn't exist.
+        if [[ ! -f ${USB_PATH}/config ]]; then
+            if /bin/bootparams | grep "^noimport=true" >/dev/null 2>&1; then
+                # Skipping interactive config, bypass rest of script.
+                exit $SMF_EXIT_OK
+            fi
+
+            /smartdc/lib/sdc-on-tty -d /dev/console \
+                /smartdc/bin/smartos_prompt_config.sh "${USB_PATH}"
+
+            # If user quit from interactive configuration then we're done.
+            [[ ! -f ${USB_PATH}/config ]] && exit $SMF_EXIT_OK
+        fi
+    fi
+
     # This puts config vars in CONFIG_
     load_sdc_config
     load_sdc_sysinfo
@@ -77,6 +96,12 @@ case "$1" in
         echo "Set root password from config."
     else
         echo "No root shadow entry in the config, cannot set."
+    fi
+
+    # If we're a SmartOS machine, mount the /usbkey/shadow file if it exists
+    if /bin/bootparams | grep "^smartos=true" > /dev/null 2>&1; then
+        [[ -f /usbkey/shadow ]] && mount -F lofs /usbkey/shadow /etc/shadow && \
+        echo "Mounted SmartOS shadow file"
     fi
 
     # Set authorized_keys for root

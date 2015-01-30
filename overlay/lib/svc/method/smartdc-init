@@ -172,6 +172,26 @@ configure_imgadm()
     imgadm update
 }
 
+# Sets the default firewall rules for a node (unless they're already set)
+set_default_fw_rules() {
+    [[ -f /var/fw/.default_rules_setup ]] && return
+
+    /usr/sbin/fwadm add -f - <<RULES
+{
+  "rules": [
+  {
+    "description": "allow pings to all VMs",
+    "rule": "FROM any TO all vms ALLOW icmp type 8 code 0",
+    "enabled": true,
+    "global": true
+  }
+  ]
+}
+RULES
+
+    [[ $? -eq 0 ]] && touch /var/fw/.default_rules_setup
+}
+
 configure_fwadm()
 {
     if [[ ! -d /var/log/fw/logs ]]; then
@@ -447,6 +467,11 @@ case "$1" in
         fi
     fi
 
+    # TODO: In theory SDC headnodes could call "set_default_fw_rules" too.
+    # Then the corresponding code could be removed from headnode.sh
+    if /bin/bootparams | grep "^smartos=true" > /dev/null 2>&1; then
+        set_default_fw_rules
+    fi
     configure_fwadm
     configure_vmadm
 
